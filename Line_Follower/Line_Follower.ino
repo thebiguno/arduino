@@ -87,8 +87,11 @@ void loop() {
 
   //Reset the LED state every time through the loop.  This turns off the LED if the state changes.
   ledControlValue = LOW;
+
+  //Use thresholds to construct a single 5 bit number representing the state of all 5 sensors.
+  uint8_t sensorState = readSensors();
   
-  //Read the button - this starts / stops the main program.
+  //Read and debounce the button - this allows us to start / stop the main code.
   if (digitalRead(BUTTON) == LOW){
       if (buttonState == 255){
         //Do nothing; this happens when we push and hold the button.
@@ -106,101 +109,63 @@ void loop() {
   }
 
   if (state){
-    //Use thresholds to construct a single 5 bit number constituting the state of 
-    // the sensors. Sensor 0 is the LSB.
-    uint8_t state = readSensors();
-  
     //This set of if statements contain the core logic of the program.  Each conditional block 
     // checks for a particular state to determine what needs to be done at this time.
-    if (state == 0x04 || state == 0x0E){
-      //Only the single middle sensor sees the line, or the three middle sensors all see the line.  Stay straight.
+    if (sensorState == 0x04){
+      //Only the single middle sensor sees the line.  Stay straight, fast is OK.
       ledControlValue = HIGH;
-      doMoveForward(0x0F, 0x0F);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Straight");
-      #endif
+      doMoveForward(0x07, 0x07);
     }
-    else if (state == 0x06){
+    else if (sensorState == 0x06){
       //Only the middle sensor and the right-of-middle sensor see the line.  Veer very slightly right.
-      ledControlValue = HIGH;
-      doMoveForward(0x0F, 0x0E);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Very Slight Right");
-      #endif
+      ledControlValue = LOW;
+      doMoveForward(0x07, 0x03);
     }
-    else if (state == 0x0C){
+    else if (sensorState == 0x0C){
       //Only the middle sensor and the left-of-middle sensor see the line.  Veer very slightly left.
-      ledControlValue = HIGH;
-      doMoveForward(0x0E, 0x0F);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Very Slight Left");
-      #endif
+      ledControlValue = LOW;
+      doMoveForward(0x03, 0x07);
     }
-    else if ((state & 0x01) == 0x00 && (state & 0x18) == 0x18){
+    else if ((sensorState & 0x11) == 0x00 && (sensorState & 0x0E) != 0x00){
+      //The outer sensors do not see the line, but some other combination (not already checked for above) of 
+      // the middle sensors do see the line.  Proceed straight ahead, but slowly.
+      ledControlValue = LOW;
+      doMoveForward(0x04, 0x04);
+    }
+    else if ((sensorState & 0x01) == 0x00 && (sensorState & 0x18) == 0x18){
       //The left two sensors are on the line, and the right-most sensor is not - slight left
-      ledControlValue = HIGH;
-      doMoveForward(0x08, 0x0F);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Slight Left");
-      #endif
+      ledControlValue = LOW;
+      doMoveForward(0x00, 0x07);
     }
-    else if ((state & 0x03) == 0x03 && (state & 0x10) == 0x00){
+    else if ((sensorState & 0x03) == 0x03 && (sensorState & 0x10) == 0x00){
       //The right two sensors are on the line, but the left-most sensor is not - slight right
-      ledControlValue = HIGH;
-      doMoveForward(0x0F, 0x08);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Slight Right");
-      #endif
+      ledControlValue = LOW;
+      doMoveForward(0x07, 0x00);
     }
-    else if ((state & 0x01) == 0x00 && (state & 0x10) == 0x10){
+    else if ((sensorState & 0x01) == 0x00 && (sensorState & 0x10) == 0x10){
       //The left sensor is on the line, but the right sensor is not - turn left hard
-      ledControlValue = HIGH;
-      doMoveForward(0x00, 0x0F);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Left");
-      #endif
+      ledControlValue = LOW;
+      doMoveSpin(DIRECTION_LEFT, 0x04, 0x04);
     }
-    else if ((state & 0x01) == 0x01 && (state & 0x10) == 0x00){
+    else if ((sensorState & 0x01) == 0x01 && (sensorState & 0x10) == 0x00){
       //The right sensor is on the line, but the left sensor is not - turn right hard
-      ledControlValue = HIGH;
-      doMoveForward(0x0F, 0x00);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Right");
-      #endif
+      ledControlValue = LOW;
+      doMoveSpin(DIRECTION_RIGHT, 0x04, 0x04);
     }
-    else if ((state & 0x11) == 0x11){
+    else if ((sensorState & 0x11) == 0x11){
       //Both left and right sensors are on the line - presumably this means the line is
       // perpendicular to the sensor array.  Spin on the spot.
-      ledControlValue = 256;
-      doMoveSpin(DIRECTION_RIGHT, 0x08, 0x08);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Spin (Perpendicular)");
-      #endif    
+      ledControlValue = LOW;
+      doMoveSpin(DIRECTION_RIGHT, 0x03, 0x03);
     }
-    else if (state == 0x00){
-      //We don't see any portion of the line.  Try moving in a spiral to find it.
-      ledControlValue = 1024;
-      doMoveForward(0x08, 0x07);
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Circle (See Nothing)");
-      #endif
+    else if (sensorState == 0x00){
+      //We don't see any portion of the line.  Try moving in a circle to find it.
+      ledControlValue = LOW;
+      doMoveSpin(DIRECTION_LEFT, 0x03, 0x03);
     }
-    else {  //Unknown state.  This should not happen in real life when following a line.  If it does, we probably need to add more state checking.
+    else {  //Unknown sensor state.  This should not happen in real life when following a line.  If it does, we probably need to add more state checking.
       ledControlValue = 32;
       doStop();
-      #ifdef DEBUG
-        Serial.print(state, BIN);
-        Serial.println(" - Stop (Unknown)");
-      #endif
     }
   }
   else {
@@ -215,8 +180,8 @@ void doMoveForward(uint8_t leftMotorSpeed, uint8_t rightMotorSpeed){
   digitalWrite(MOTOR_R_A, LOW);
   digitalWrite(MOTOR_R_B, HIGH);
 
-  motorLeftPwmValue = (leftMotorSpeed & 0x0F);
-  motorRightPwmValue = (rightMotorSpeed & 0x0F);
+  motorLeftPwmValue = (leftMotorSpeed & 0x07);
+  motorRightPwmValue = (rightMotorSpeed & 0x07);
 }
 
 void doMoveSpin(uint8_t spinDirection, uint8_t leftMotorSpeed, uint8_t rightMotorSpeed){
@@ -236,8 +201,8 @@ void doMoveSpin(uint8_t spinDirection, uint8_t leftMotorSpeed, uint8_t rightMoto
     doStop();
   }
 
-  motorLeftPwmValue = (leftMotorSpeed & 0x0F);
-  motorRightPwmValue = (rightMotorSpeed & 0x0F);
+  motorLeftPwmValue = (leftMotorSpeed & 0x07);
+  motorRightPwmValue = (rightMotorSpeed & 0x07);
 }
 
 //Stop moving completely.
@@ -263,15 +228,15 @@ uint8_t readSensors(){
   rawValues[4] = analogRead(SENSOR_4);
 
 #ifdef DEBUG
-//  Serial.print(rawValues[0]);
-//  Serial.print("\t");
-//  Serial.print(rawValues[1]);
-//  Serial.print("\t");
-//  Serial.print(rawValues[2]);
-//  Serial.print("\t");
-//  Serial.print(rawValues[3]);
-//  Serial.print("\t");
-//  Serial.println(rawValues[4]);
+  Serial.print(rawValues[0]);
+  Serial.print("\t");
+  Serial.print(rawValues[1]);
+  Serial.print("\t");
+  Serial.print(rawValues[2]);
+  Serial.print("\t");
+  Serial.print(rawValues[3]);
+  Serial.print("\t");
+  Serial.println(rawValues[4]);
 #endif
   
   uint8_t result = 0;
@@ -296,20 +261,14 @@ uint8_t readSensors(){
 }
 
 void updatePWM(){
-  //Get the 5 LSB of the millis value
-  uint8_t millisLSB = (millis() & 0x0F);
+  //Get the 3 LSB of the millis value
+  uint8_t millisLSB = (millis() & 0x07);
 
-#ifdef DEBUG
-//  Serial.print(motorLeftPwmValue, HEX);
-//  Serial.print("\t");
-//  Serial.println(motorRightPwmValue, HEX);
-#endif
-
-  //The 5 LSB of the motor set values are compared with the 5 LSB of the millis value.  This is
+  //The 3 LSB of the motor set values are compared with the 3 LSB of the millis value.  This is
   // a poor man's PWM approximation.  It will not give a proper PWM waveform, as it will sometimes
   // 'miss' a value, but it is close enough for rough motor control.
-  digitalWrite(MOTOR_L_EN, (motorLeftPwmValue > millisLSB));
-  digitalWrite(MOTOR_R_EN, (motorRightPwmValue > millisLSB));
+  digitalWrite(MOTOR_L_EN, (motorLeftPwmValue == 0 ? 0 : motorLeftPwmValue >= millisLSB));
+  digitalWrite(MOTOR_R_EN, (motorRightPwmValue == 0 ? 0 : motorRightPwmValue >= millisLSB));
 
   //The LED works a bit differently than the motors... if you set the value to 0 (LOW) or 1 (HIGH)
   // it is always on or always off.  Otherwise, we use the control value as the PWM period (in ms), 
