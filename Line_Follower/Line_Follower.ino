@@ -198,11 +198,10 @@ void loop() {
         //Neither left nor right sensors are on the line.  Turn left to try to find the line again.
         led1ControlValue = LOW;
         led2ControlValue = HIGH;
-        //doMoveForward(0x00, 0x03);
-        doStop();
+        doMoveSpin(DIRECTION_LEFT, 0x03, 0x01);
+//        doStop();
         #ifdef DEBUG
-          Serial.print("TL");
-          Serial.println(sensorState, BIN);
+          Serial.println("TL");
         #endif
       }
       else {  //Unknown sensor state.  This should never happen (the above conditions will catch all 32 possible states)
@@ -274,19 +273,19 @@ uint8_t readSensors(){
 
   uint8_t result = 0;
   
-  if (rawValues[0] > 80){
+  if (rawValues[0] > 50){
     result |= 0x10;
   }
-  if (rawValues[1] > 80){
+  if (rawValues[1] > 50){
     result |= 0x08;
   }
-  if (rawValues[2] > 80){
+  if (rawValues[2] > 50){
     result |= 0x04;
   }
-  if (rawValues[3] > 80){
+  if (rawValues[3] > 50){
     result |= 0x02;
   }
-  if (rawValues[4] > 80){
+  if (rawValues[4] > 50){
     result |= 0x01;
   }
 
