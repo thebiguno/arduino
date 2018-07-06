@@ -122,20 +122,11 @@ void loop() {
       
       //This set of if statements contain the core logic of the program.  Each conditional block 
       // checks for a particular state to determine what needs to be done at this time.
-      if (sensorState == 0x0E){
-        //Only the middle sensor sees the line and the two outside ones do not.  Stay straight.
-        led1ControlValue = HIGH;
-        led2ControlValue = LOW;
-        doMoveForward(0x04, 0x04);
-        #ifdef DEBUG
-          Serial.println("S");
-        #endif
-      }
-      else if (sensorState == 0x0C){
+      if (sensorState == 0x0C){
         //Only the middle sensor and the left-of-middle sensor see the line.  Slight left.
         led1ControlValue = HIGH;
         led2ControlValue = 2;
-        doMoveForward(0x03, 0x04);
+        doMoveForward(0x05, 0x06);
         #ifdef DEBUG
           Serial.println("L1");
         #endif
@@ -144,16 +135,25 @@ void loop() {
         //Only the middle sensor and the right-of-middle sensor see the line.  Slight right.
         led1ControlValue = HIGH;
         led2ControlValue = 2;
-        doMoveForward(0x04, 0x03);
+        doMoveForward(0x06, 0x05);
         #ifdef DEBUG
           Serial.println("R1");
+        #endif
+      }
+      else if ((sensorState & 0x0E) != 0x00 && (sensorState & 0x11) == 0x00){
+        //At least one of the three middle sensors see the line and the two outside ones do not.  Stay straight.
+        led1ControlValue = HIGH;
+        led2ControlValue = LOW;
+        doMoveForward(0x07, 0x07);
+        #ifdef DEBUG
+          Serial.println("S");
         #endif
       }
       else if ((sensorState & 0x01) == 0x00 && (sensorState & 0x18) == 0x18){
         //The left two sensors are on the line, and the right-most sensor is not.  Left
         led1ControlValue = HIGH;
         led2ControlValue = 4;
-        doMoveForward(0x01, 0x03);
+        doMoveForward(0x02, 0x04);
         #ifdef DEBUG
           Serial.println("L2");
         #endif
@@ -162,7 +162,7 @@ void loop() {
         //The right two sensors are on the line, but the left-most sensor is not.  Right
         led1ControlValue = HIGH;
         led2ControlValue = 4;
-        doMoveForward(0x03, 0x01);
+        doMoveForward(0x04, 0x02);
         #ifdef DEBUG
           Serial.println("R2");
         #endif
@@ -171,7 +171,7 @@ void loop() {
         //The left sensor is on the line, but the right sensor is not - spin left hard.
         led1ControlValue = HIGH;
         led2ControlValue = 6;
-        doMoveSpin(DIRECTION_LEFT, 0x03, 0x01);
+        doMoveSpin(DIRECTION_LEFT, 0x03, 0x02);
         #ifdef DEBUG
           Serial.println("L3");
         #endif
@@ -180,7 +180,7 @@ void loop() {
         //The right sensor is on the line, but the left sensor is not - turn right hard
         led1ControlValue = HIGH;
         led2ControlValue = 6;
-        doMoveSpin(DIRECTION_RIGHT, 0x01, 0x03);
+        doMoveSpin(DIRECTION_RIGHT, 0x02, 0x03);
         #ifdef DEBUG
           Serial.println("R3");
         #endif
@@ -194,13 +194,15 @@ void loop() {
           Serial.println("TR");
         #endif
       }
-      else if ((sensorState & 0x11) == 0x00){
+      else if (sensorState == 0x00){
         //Neither left nor right sensors are on the line.  Turn left to try to find the line again.
         led1ControlValue = LOW;
         led2ControlValue = HIGH;
-        doMoveForward(0x00, 0x03);
+        //doMoveForward(0x00, 0x03);
+        doStop();
         #ifdef DEBUG
-          Serial.println("TL");
+          Serial.print("TL");
+          Serial.println(sensorState, BIN);
         #endif
       }
       else {  //Unknown sensor state.  This should never happen (the above conditions will catch all 32 possible states)
